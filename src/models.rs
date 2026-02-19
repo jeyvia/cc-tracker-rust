@@ -50,6 +50,11 @@ pub struct CardRecommendation {
     pub miles_per_dollar: f64,
     pub block_size: f64,
     pub effective_rate: f64,
+    pub miles_earned: f64,
+    #[tabled(display_with = "display_option_f64")]
+    pub remaining_limit: Option<f64>,
+    pub eligible: bool,
+    pub reason: String,
 }
 
 #[derive(Debug, Clone, Serialize, Tabled)]

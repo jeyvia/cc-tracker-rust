@@ -61,6 +61,15 @@ enum Commands {
         /// Spending category to look up (e.g. "dining")
         #[arg(long)]
         category: String,
+        /// Amount you plan to spend
+        #[arg(long)]
+        amount: f64,
+        /// Payment method: contactless, "mobile contactless", or online
+        #[arg(long)]
+        payment_category: String,
+        /// Date of purchase (YYYY-MM-DD), defaults to today
+        #[arg(long)]
+        date: Option<String>,
     },
 
     /// Record a spending transaction
@@ -85,6 +94,22 @@ enum Commands {
         #[arg(long)]
         card_id: Option<i64>,
     },
+}
+
+/// Convert days since Unix epoch to (year, month, day)
+fn days_to_ymd(days: i64) -> (i64, i64, i64) {
+    // Algorithm from http://howardhinnant.github.io/date_algorithms.html
+    let z = days + 719468;
+    let era = (if z >= 0 { z } else { z - 146096 }) / 146097;
+    let doe = z - era * 146097;
+    let yoe = (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365;
+    let y = yoe + era * 400;
+    let doy = doe - (365 * yoe + yoe / 4 - yoe / 100);
+    let mp = (5 * doy + 2) / 153;
+    let d = doy - (153 * mp + 2) / 5 + 1;
+    let m = if mp < 10 { mp + 3 } else { mp - 9 };
+    let y = if m <= 2 { y + 1 } else { y };
+    (y, m, d)
 }
 
 fn main() {
@@ -141,13 +166,20 @@ fn main() {
             }
         }
 
-        Commands::BestCard { category } => {
-            let results = db::best_card_for_category(&conn, &category)
+        Commands::BestCard { category, amount, payment_category, date } => {
+            let date = date.unwrap_or_else(|| {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+                let days = (now / 86400) as i64;
+                let (y, m, d) = days_to_ymd(days);
+                format!("{:04}-{:02}-{:02}", y, m, d)
+            });
+            let results = db::best_card_for_category(&conn, &category, amount, &payment_category, &date)
                 .expect("Failed to query best card");
             if results.is_empty() {
-                println!("No cards have rewards for category '{}'", category);
+                println!("No cards match category '{}' with payment '{}'", category, payment_category);
             } else {
-                println!("Best cards for '{}':", category);
+                println!("Best cards for '{}' (${:.2}, {}):", category, amount, payment_category);
                 println!("{}", Table::new(&results));
             }
         }
